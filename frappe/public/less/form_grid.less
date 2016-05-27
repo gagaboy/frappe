@@ -63,7 +63,39 @@
 	text-align: right;
 	width: 30px;
 	margin-left: -15px;
+	margin-top: 1px;
 	float: left;
+}
+
+.grid-row > .row {
+	margin-right: 15px !important;
+
+	.col {
+		padding-left: 10px;
+		padding-right: 0px;
+	}
+}
+
+.grid-body {
+	.btn-open-row {
+		margin-top: -3px;
+	}
+
+	.editable-row {
+		.row-index {
+			margin-top: 7px;
+		}
+
+		.btn-open-row {
+			margin-top: 0px;
+			padding: 3px 7px;
+			margin-right: -20px;
+		}
+
+		input[data-fieldtype="Int"], input[data-fieldtype="Float"], input[data-fieldtype="Currency"] {
+			text-align: right;
+		}
+	}
 }
 
 .row-data > .row {
@@ -77,6 +109,10 @@
 
 	p {
 		margin-bottom: 5px;
+	}
+
+	.frappe-control {
+		margin-bottom: 0px;
 	}
 
 	.col-sm-6 {

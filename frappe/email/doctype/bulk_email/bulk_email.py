@@ -6,6 +6,7 @@ import frappe
 
 from frappe.model.document import Document
 from frappe.email.bulk import send_one
+from frappe.utils import now_datetime
 
 class BulkEmail(Document):
 	pass
@@ -21,3 +22,7 @@ def retry_sending(name):
 def send_now(name):
 	doc = frappe.get_doc("Bulk Email", name)
 	send_one(doc, now=True)
+
+def on_doctype_update():
+	"""Add index in `tabCommunication` for `(reference_doctype, reference_name)`"""
+	frappe.db.add_index('Bulk Email', ('status', 'send_after', 'priority', 'creation'), 'index_bulk_flush')

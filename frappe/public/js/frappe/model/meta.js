@@ -52,12 +52,26 @@ $.extend(frappe.meta, {
 		}
 	},
 
-	get_field: function(dt, fn, dn) {
-		return frappe.meta.get_docfield(dt, fn, dn);
+	get_field: function(doctype, fieldname, name) {
+		return frappe.meta.get_docfield(doctype, fieldname, name);
 	},
 
-	get_docfield: function(dt, fn, dn) {
-		return frappe.meta.get_docfield_copy(dt, dn)[fn];
+	get_docfield: function(doctype, fieldname, name) {
+		return frappe.meta.get_docfield_copy(doctype, name)[fieldname];
+	},
+
+	set_formatter: function(doctype, fieldname, name, formatter) {
+		frappe.meta.get_docfield(doctype, fieldname, name).formatter = formatter;
+	},
+
+	set_indicator_formatter: function(doctype, fieldname, name, get_text, get_color) {
+		frappe.meta.get_docfield(doctype, fieldname, name).formatter =
+			function(value, df, options, doc) {
+				return repl('<span class="indicator %(color)s">%(name)s</span>', {
+					color: get_color(),
+					name: get_text()
+				});
+			};
 	},
 
 	get_docfields: function(doctype, name, filters) {
