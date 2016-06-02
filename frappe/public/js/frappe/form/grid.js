@@ -214,6 +214,15 @@ frappe.ui.form.Grid = Class.extend({
 					$(this).find(".row-index").html(i + 1);
 					me.frm.doc[me.df.fieldname].push(doc);
 				});
+
+				// re-order grid-rows by name
+				me.grid_rows = [];
+				me.frm.doc[me.df.fieldname].forEach(function(d) {
+					me.grid_rows.push(me.grid_rows_by_docname[d.name]);
+				});
+
+				me.refresh();
+
 				me.frm.dirty();
 			}
 		});
@@ -583,6 +592,7 @@ frappe.ui.form.GridRow = Class.extend({
 			this.row_index.html(this.doc ? this.doc.idx : "&nbsp;");
 		}
 
+		// TODO: remove grid templates
 		if(this.grid.template && false) {
 			// rendered via template
 			this.row_data && this.row_data.empty();
@@ -691,6 +701,7 @@ frappe.ui.form.GridRow = Class.extend({
 			df: df,
 			parent: parent,
 			only_input: true,
+			with_link_btn: true,
 			doctype: this.doc.doctype,
 			docname: this.doc.name,
 			frm: this.grid.frm
@@ -706,8 +717,7 @@ frappe.ui.form.GridRow = Class.extend({
 				// TAB
 				if(e.which==9) {
 					// last row, last column
-					if(cint($(this).attr('data-col-idx')) === me.grid.static_display_template.length-1 &&
-						me.doc.idx===me.frm.doc[me.grid.df.fieldname].length) {
+					if(me.grid.wrapper.find('input:enabled:last').get(0)===this) {
 
 						setTimeout(function() {
 							me.grid.add_new_row(null, null, true);

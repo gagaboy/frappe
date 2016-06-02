@@ -158,7 +158,7 @@ frappe.ui.form.Toolbar = Class.extend({
 		// New
 		if(p[CREATE] && !this.frm.meta.issingle) {
 			this.page.add_menu_item(__("New {0} (Ctrl+B)", [__(me.frm.doctype)]), function() {
-				new_doc(me.frm.doctype);}, true);
+				frappe.new_doc(me.frm.doctype, true);}, true);
 		}
 
 	},
@@ -262,9 +262,6 @@ frappe.ui.form.Toolbar = Class.extend({
 		} else {
 			var click = {
 				"Save": function() {
-					if(!frappe.dom.is_touchscreen() && Math.random() < 0.25) {
-						show_alert(__("ProTip: You can also use Ctrl+S to Save"));
-					}
 					me.frm.save('Save', null, this);
 				},
 				"Submit": function() {

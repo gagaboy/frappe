@@ -255,8 +255,8 @@ frappe.Application = Class.extend({
 				if(cur_dialog) {
 					// trigger primary
 					cur_dialog.get_primary_btn().trigger("click");
-				} else if(cur_frm) {
-					cur_frm.save_or_update();
+				} else if(cur_frm && cur_frm.page.btn_primary.is(':visible')) {
+					cur_frm.page.btn_primary.trigger('click');
 				} else if(frappe.container.page.save_action) {
 					frappe.container.page.save_action();
 				}
@@ -266,7 +266,7 @@ frappe.Application = Class.extend({
 				e.preventDefault();
 				var route = frappe.get_route();
 				if(route[0]==='Form' || route[0]==='List') {
-					new_doc(route[1]);
+					frappe.new_doc(route[1], true);
 				}
 				return false;
 			})

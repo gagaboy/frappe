@@ -23,6 +23,10 @@ def set_new_name(doc):
 	doc.run_method("before_naming")
 
 	autoname = frappe.get_meta(doc.doctype).autoname
+	
+	if autoname != "Prompt":
+		doc.name = None
+	
 	if getattr(doc, "amended_from", None):
 		_set_amended_name(doc)
 		return
@@ -30,10 +34,10 @@ def set_new_name(doc):
 	elif getattr(doc.meta, "issingle", False):
 		doc.name = doc.doctype
 
-	elif hasattr(doc, "autoname"):
+	else:
 		doc.run_method("autoname")
 
-	elif autoname:
+	if not doc.name and autoname:
 		if autoname.startswith('field:'):
 			fieldname = autoname[6:]
 			doc.name = (doc.get(fieldname) or "").strip()
@@ -195,7 +199,7 @@ def append_number_if_name_exists(doc):
 			count = "1"
 
 		doc.name = "{0}-{1}".format(doc.name, count)
-		
+
 	return doc
 
 def de_duplicate(doctype, name):
