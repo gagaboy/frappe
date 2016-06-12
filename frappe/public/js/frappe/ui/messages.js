@@ -140,6 +140,10 @@ frappe.msgprint = function(msg, title) {
 }
 
 frappe.hide_msgprint = function(instant) {
+	// clear msgprint
+	if(msg_dialog && msg_dialog.msg_area) {
+		msg_dialog.msg_area.empty();
+	}
 	if(msg_dialog && msg_dialog.$wrapper.is(":visible")) {
 		if(instant) {
 			msg_dialog.$wrapper.removeClass("fade");
@@ -226,7 +230,7 @@ frappe.show_alert = function(txt, seconds) {
 		return false;
 	});
 
-	div.delay(seconds ? seconds * 1000 : 3000).fadeOut(300);
+	div.delay(seconds ? seconds * 1000 : 7000).fadeOut(300);
 	return div;
 }
 

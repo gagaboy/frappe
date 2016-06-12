@@ -11,10 +11,10 @@ from functools import wraps
 import os, importlib, inspect, json
 
 # public
-from frappe.__version__ import __version__
 from .exceptions import *
 from .utils.jinja import get_jenv, get_template, render_template
 
+__version__ = "7.0.0-beta"
 
 local = Local()
 
@@ -282,6 +282,12 @@ def throw(msg, exc=ValidationError):
 	:param msg: Message.
 	:param exc: Exception class. Default `frappe.ValidationError`"""
 	msgprint(msg, raise_exception=exc)
+
+def emit_js(js, user=False, **kwargs):
+	from frappe.async import publish_realtime
+	if user == False:
+		user = session.user
+	publish_realtime('eval_js', js, user=user, **kwargs)
 
 def create_folder(path, with_init=False):
 	"""Create a folder in the given path and add an `__init__.py` file (optional).
