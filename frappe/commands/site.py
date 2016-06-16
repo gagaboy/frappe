@@ -4,6 +4,9 @@ import hashlib, os
 import frappe
 from frappe.commands import pass_context, get_site
 from frappe.commands.scheduler import _is_scheduler_enabled
+from frappe.commands import get_site
+from frappe.limits import set_limits, get_limits
+from frappe.installer import update_site_config
 
 @click.command('new-site')
 @click.argument('site')
@@ -313,6 +316,7 @@ def move(dest_dir, site):
 def set_admin_password(context, admin_password):
 	"Set Administrator password for a site"
 	import getpass
+	from frappe.utils.password import update_password
 
 	for site in context.sites:
 		try:
@@ -322,12 +326,59 @@ def set_admin_password(context, admin_password):
 				admin_password = getpass.getpass("Administrator's password for {0}: ".format(site))
 
 			frappe.connect()
-			frappe.db.sql("""update __Auth set `password`=password(%s)
-				where user='Administrator'""", (admin_password,))
+			update_password('Administrator', admin_password)
 			frappe.db.commit()
 			admin_password = None
 		finally:
 			frappe.destroy()
+
+
+@click.command('set-limit')
+@click.option('--site', help='site name')
+@click.argument('limit', type=click.Choice(['email', 'space', 'user', 'expiry']))
+@click.argument('value')
+@pass_context
+def set_limit(context, site, limit, value):
+	"""Sets user / space / email limit for a site"""
+	import datetime
+	if not site:
+		site = get_site(context)
+
+	with frappe.init_site(site):
+		if limit == 'expiry':
+			try:
+				datetime.datetime.strptime(value, '%Y-%m-%d')
+			except ValueError:
+				raise ValueError("Incorrect data format, should be YYYY-MM-DD")
+		else:
+			limit += '_limit'
+			# Space can be float, while other should be integers
+			val = float(value) if limit == 'space_limit' else int(value)
+
+		set_limits({limit : value})
+
+
+@click.command('clear-limit')
+@click.option('--site', help='site name')
+@click.argument('limit', type=click.Choice(['email', 'space', 'user', 'expiry']))
+@pass_context
+def clear_limit(context, site, limit):
+	"""Clears given limit from the site config, and removes limit from site config if its empty"""
+	from frappe.limits import clear_limit as _clear_limit
+	if not site:
+		site = get_site(context)
+
+	with frappe.init_site(site):
+		if not limit == 'expiry':
+			limit += '_limit'
+
+		_clear_limit(limit)
+
+		# Remove limits from the site_config, if it's empty
+		cur_limits = get_limits()
+		if not cur_limits:
+			update_site_config('limits', 'None', validate=False)
+
 
 commands = [
 	add_system_manager,
@@ -344,5 +395,7 @@ commands = [
 	run_patch,
 	set_admin_password,
 	uninstall,
+	set_limit,
+	clear_limit,
 	_use,
 ]

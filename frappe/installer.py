@@ -16,6 +16,7 @@ from frappe.model.sync import sync_for
 from frappe.utils.fixtures import sync_fixtures
 from frappe.website import render, statics
 from frappe.desk.doctype.desktop_icon.desktop_icon import sync_from_app
+from frappe.utils.password import create_auth_table
 
 def install_db(root_login="root", root_password=None, db_name=None, source_sql=None,
 	admin_password=None, verbose=True, force=0, site_config=None, reinstall=False):
@@ -67,12 +68,6 @@ def create_database_and_user(force, verbose):
 
 	# close root connection
 	frappe.db.close()
-
-def create_auth_table():
-	frappe.db.sql_ddl("""create table if not exists __Auth (
-		`user` VARCHAR(180) NOT NULL PRIMARY KEY,
-		`password` VARCHAR(180) NOT NULL
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8""")
 
 def create_list_settings_table():
 	frappe.db.sql_ddl("""create table if not exists __ListSettings (
@@ -256,16 +251,17 @@ def make_site_config(db_name=None, db_password=None, site_config=None):
 		with open(site_file, "w") as f:
 			f.write(json.dumps(site_config, indent=1, sort_keys=True))
 
-def update_site_config(key, value):
+def update_site_config(key, value, validate=True):
 	"""Update a value in site_config"""
 	with open(get_site_config_path(), "r") as f:
 		site_config = json.loads(f.read())
 
-	# int
-	try:
-		value = int(value)
-	except ValueError:
-		pass
+	# In case of non-int value
+	if validate:
+		try:
+			value = int(value)
+		except ValueError:
+			pass
 
 	# boolean
 	if value in ("False", "True"):
