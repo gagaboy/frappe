@@ -39,7 +39,7 @@ $.extend(frappe, {
 			data: opts.args,
 			dataType: "json",
 			headers: { "X-Frappe-CSRF-Token": frappe.csrf_token },
-			statusCode: {
+			statusCode: opts.statusCode || {
 				404: function(xhr) {
 					frappe.msgprint(__("Not found"));
 				},
@@ -100,7 +100,16 @@ $.extend(frappe, {
 		}
 
 		if (data._server_messages) {
-			var server_messages = (JSON.parse(data._server_messages || '[]')).join("<br>");
+			var server_messages = JSON.parse(data._server_messages || '[]');
+			server_messages = $.map(server_messages, function(v) {
+				// temp fix for messages sent as dict
+				try {
+					return JSON.parse(v).message;
+				} catch (e) {
+					return v;
+				}
+			}).join('<br>');
+
 			if(opts.error_msg) {
 				$(opts.error_msg).html(server_messages).toggle(true);
 			} else {
@@ -110,8 +119,8 @@ $.extend(frappe, {
 
 		if(data.exc) {
 			if(opts.btn) {
-				$(opts.btn).addClass("btn-danger");
-				setTimeout(function() { $(opts.btn).removeClass("btn-danger"); }, 1000);
+				$(opts.btn).addClass($(opts.btn).is('button') || $(opts.btn).hasClass('btn') ? "btn-danger" : "text-danger");
+				setTimeout(function() { $(opts.btn).removeClass("btn-danger text-danger"); }, 1000);
 			}
 			try {
 				var err = JSON.parse(data.exc);
@@ -125,8 +134,8 @@ $.extend(frappe, {
 
 		} else{
 			if(opts.btn) {
-				$(opts.btn).addClass("btn-success");
-				setTimeout(function() { $(opts.btn).removeClass("btn-success"); }, 1000);
+				$(opts.btn).addClass($(opts.btn).is('button') || $(opts.btn).hasClass('btn') ? "btn-success" : "text-success");
+				setTimeout(function() { $(opts.btn).removeClass("btn-success text-success"); }, 1000);
 			}
 		}
 		if(opts.msg && data.message) {
@@ -178,7 +187,7 @@ $.extend(frappe, {
 	send_message: function(opts, btn) {
 		return frappe.call({
 			type: "POST",
-			method: "frappe.templates.pages.contact.send_message",
+			method: "frappe.www.contact.send_message",
 			btn: btn,
 			args: opts,
 			callback: opts.callback
@@ -287,7 +296,6 @@ $.extend(frappe, {
 			if(e.which===13 && val) {
 				$(this).val("").blur();
 				frappe.do_search(val);
-				$(".offcanvas").removeClass("active-left active-right");
 				return false;
 			}
 		});
@@ -362,27 +370,14 @@ $(document).ready(function() {
 	window.logged_in = getCookie("sid") && getCookie("sid")!=="Guest";
 	$("#website-login").toggleClass("hide", logged_in ? true : false);
 	$("#website-post-login").toggleClass("hide", logged_in ? false : true);
+	$(".logged-in").toggleClass("hide", logged_in ? false : true);
 
 	frappe.bind_navbar_search();
 
-	$(".toggle-sidebar").on("click", function() {
-		$(".offcanvas").addClass("active-right");
-		return false;
-	});
-
-	// collapse offcanvas sidebars!
-	$(".offcanvas .sidebar").on("click", "a", function() {
-		$(".offcanvas").removeClass("active-left active-right");
-	});
-
-	$(".offcanvas-main-section-overlay").on("click", function() {
-		$(".offcanvas").removeClass("active-left active-right");
-		return false;
-	});
-
 	// switch to app link
-	if(getCookie("system_user")==="yes") {
+	if(getCookie("system_user")==="yes" && logged_in) {
 		$("#website-post-login .dropdown-menu").append('<li><a href="/desk">Switch To Desk</a></li>');
+		$(".navbar-header .dropdown .dropdown-menu").append('<li><a href="/desk">Switch To Desk</a></li>');
 	}
 
 	frappe.render_user();
@@ -393,6 +388,9 @@ $(document).ready(function() {
 $(document).on("page-change", function() {
 	$(document).trigger("apply_permissions");
 	$('.dropdown-toggle').dropdown();
+
+	$.extend(frappe, getCookies());
+	frappe.session = {'user': frappe.user_id};
 
 	frappe.datetime.refresh_when();
 	frappe.trigger_ready();

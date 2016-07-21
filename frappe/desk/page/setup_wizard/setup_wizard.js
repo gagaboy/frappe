@@ -421,7 +421,7 @@ function load_frappe_slides() {
 	},
 
 
-	frappe.wiz.user= {
+	frappe.wiz.user = {
 		app_name: "frappe",
 		title: __("The First User: You"),
 		icon: "icon-user",

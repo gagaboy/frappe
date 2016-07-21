@@ -65,35 +65,6 @@ def destroy_all_sessions(context):
 		finally:
 			frappe.destroy()
 
-@click.command('sync-www')
-@click.option('--force', help='Rebuild all pages', is_flag=True, default=False)
-@pass_context
-def sync_www(context, force=False):
-	"Sync files from static pages from www directory to Web Pages"
-	from frappe.website import statics
-	for site in context.sites:
-		try:
-			frappe.init(site=site)
-			frappe.connect()
-			statics.sync_statics(rebuild=force)
-			frappe.db.commit()
-		finally:
-			frappe.destroy()
-
-@click.command('build-website')
-@pass_context
-def build_website(context):
-	"Sync statics and clear cache"
-	from frappe.website import render, statics
-	for site in context.sites:
-		try:
-			frappe.init(site=site)
-			frappe.connect()
-			render.clear_cache()
-			statics.sync(verbose=context.verbose).start(rebuild=True)
-			frappe.db.commit()
-		finally:
-			frappe.destroy()
 
 @click.command('reset-perms')
 @pass_context
@@ -132,7 +103,7 @@ def execute(context, method, args=None, kwargs=None):
 				args = ()
 
 			if kwargs:
-				kwargs = eval(args)
+				kwargs = eval(kwargs)
 			else:
 				kwargs = {}
 
@@ -144,6 +115,20 @@ def execute(context, method, args=None, kwargs=None):
 			frappe.destroy()
 		if ret:
 			print json.dumps(ret)
+
+
+@click.command('add-to-email-queue')
+@click.argument('email')
+@pass_context
+def add_to_email_queue(context, email):
+	"Add an email to the Email Queue"
+	site = get_site(context)
+	with frappe.init_site(site):
+		frappe.connect()
+		kwargs = json.loads(email)
+		kwargs['delayed'] = True
+		frappe.sendmail(**kwargs)
+		frappe.db.commit()
 
 
 @click.command('export-doc')
@@ -395,7 +380,6 @@ def get_version():
 
 commands = [
 	build,
-	build_website,
 	clear_cache,
 	clear_website_cache,
 	console,
@@ -415,7 +399,7 @@ commands = [
 	run_tests,
 	serve,
 	set_config,
-	sync_www,
 	watch,
 	_bulk_rename,
+	add_to_email_queue,
 ]

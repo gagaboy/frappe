@@ -350,7 +350,9 @@ class BaseDocument(object):
 
 	def db_set(self, fieldname, value, update_modified=True):
 		self.set(fieldname, value)
-		if update_modified:
+		if update_modified and (self.doctype, self.name) not in frappe.flags.currently_saving:
+			# don't update modified timestamp if called from post save methods
+			# like on_update or on_submit
 			self.set("modified", now())
 			self.set("modified_by", frappe.session.user)
 
@@ -358,6 +360,10 @@ class BaseDocument(object):
 			self.modified, self.modified_by, update_modified=update_modified)
 
 		self.run_method('on_change')
+
+	def db_get(self, fieldname):
+		'''get database vale for this fieldname'''
+		return frappe.db.get_value(self.doctype, self.name, fieldname)
 
 	def update_modified(self):
 		'''Update modified timestamp'''
@@ -565,9 +571,8 @@ class BaseDocument(object):
 						or (self.docstatus==1 and not df.get("allow_on_submit"))):
 				continue
 
-
 			else:
-				sanitized_value = sanitize_html(value)
+				sanitized_value = sanitize_html(value, linkify=df.fieldtype=='Text Editor')
 
 			self.set(fieldname, sanitized_value)
 
@@ -671,9 +676,6 @@ class BaseDocument(object):
 				print_hide = df.print_hide
 			elif meta_df:
 				print_hide = meta_df.print_hide
-
-		if fieldname=='in_words':
-			print fieldname, print_hide, meta_df.print_hide
 
 		return print_hide
 

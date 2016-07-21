@@ -44,10 +44,11 @@ frappe.ui.Dialog = frappe.ui.FieldGroup.extend({
 				me.display = false;
 				if(frappe.ui.open_dialogs[frappe.ui.open_dialogs.length-1]===me) {
 					frappe.ui.open_dialogs.pop();
-					if(frappe.ui.open_dialogs.length)
+					if(frappe.ui.open_dialogs.length) {
 						cur_dialog = frappe.ui.open_dialogs[frappe.ui.open_dialogs.length-1];
-					else
+					} else {
 						cur_dialog = null;
+					}
 				}
 				me.onhide && me.onhide();
 			})
@@ -66,6 +67,7 @@ frappe.ui.Dialog = frappe.ui.FieldGroup.extend({
 
 	},
 	focus_on_first_input: function() {
+		if(this.no_focus) return;
 		$.each(this.fields_list, function(i, f) {
 			if(!in_list(['Date', 'Datetime', 'Time'], f.df.fieldtype) && f.set_focus) {
 				f.set_focus();

@@ -30,7 +30,7 @@ frappe.ui.form.Toolbar = Class.extend({
 	},
 	set_title: function() {
 		if(this.frm.meta.title_field) {
-			var title = (this.frm.doc[this.frm.meta.title_field] || "").trim() || this.frm.docname;
+			var title = strip_html((this.frm.doc[this.frm.meta.title_field] || "").trim() || this.frm.docname);
 			if(this.frm.doc.__islocal || title === this.frm.docname || this.frm.meta.autoname==="hash") {
 				this.page.set_title_sub("");
 			} else {
@@ -39,6 +39,7 @@ frappe.ui.form.Toolbar = Class.extend({
 		} else {
 			var title = this.frm.docname;
 		}
+
 		var me = this;
 		title = __(title);
 		this.page.set_title(title);
@@ -161,6 +162,13 @@ frappe.ui.form.Toolbar = Class.extend({
 					doc_type: me.frm.doctype
 				})
 			}, true);
+
+			if (frappe.boot.developer_mode===1 && me.frm.meta.issingle) {
+				// edit doctype
+				this.page.add_menu_item(__("Edit DocType"), function() {
+					frappe.set_route('Form', 'DocType', me.frm.doctype);
+				}, true);
+			}
 		}
 
 		// New

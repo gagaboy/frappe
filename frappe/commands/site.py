@@ -1,12 +1,12 @@
 from __future__ import unicode_literals, absolute_import
 import click
-import hashlib, os
+import hashlib, os, sys
 import frappe
 from frappe.commands import pass_context, get_site
 from frappe.commands.scheduler import _is_scheduler_enabled
-from frappe.commands import get_site
-from frappe.limits import set_limits, get_limits
+from frappe.limits import update_limits, get_limits
 from frappe.installer import update_site_config
+from frappe.utils import touch_file, get_site_path
 
 @click.command('new-site')
 @click.argument('site')
@@ -24,12 +24,17 @@ def new_site(site, mariadb_root_username=None, mariadb_root_password=None, admin
 		db_name = hashlib.sha1(site).hexdigest()[:10]
 
 	frappe.init(site=site, new_site=True)
-	_new_site(db_name, site, mariadb_root_username=mariadb_root_username, mariadb_root_password=mariadb_root_password, admin_password=admin_password, verbose=verbose, install_apps=install_app, source_sql=source_sql, force=force)
+
+	_new_site(db_name, site, mariadb_root_username=mariadb_root_username, mariadb_root_password=mariadb_root_password, admin_password=admin_password,
+			verbose=verbose, install_apps=install_app, source_sql=source_sql, force=force)
+
 	if len(frappe.utils.get_sites()) == 1:
 		use(site)
 
-def _new_site(db_name, site, mariadb_root_username=None, mariadb_root_password=None, admin_password=None, verbose=False, install_apps=None, source_sql=None,force=False, reinstall=False):
-	"Install a new Frappe site"
+def _new_site(db_name, site, mariadb_root_username=None, mariadb_root_password=None, admin_password=None,
+	verbose=False, install_apps=None, source_sql=None,force=False, reinstall=False):
+	"""Install a new Frappe site"""
+
 	from frappe.installer import install_db, make_site_dirs
 	from frappe.installer import install_app as _install_app
 	import frappe.utils.scheduler
@@ -42,24 +47,27 @@ def _new_site(db_name, site, mariadb_root_username=None, mariadb_root_password=N
 	except:
 		enable_scheduler = False
 
-	install_db(root_login=mariadb_root_username, root_password=mariadb_root_password, db_name=db_name, admin_password=admin_password, verbose=verbose, source_sql=source_sql,force=force, reinstall=reinstall)
 	make_site_dirs()
-	_install_app("frappe", verbose=verbose, set_as_patched=not source_sql)
 
-	if frappe.conf.get("install_apps"):
-		for app in frappe.conf.install_apps:
+	try:
+		installing = touch_file(get_site_path('locks', 'installing.lock'))
+
+		install_db(root_login=mariadb_root_username, root_password=mariadb_root_password, db_name=db_name,
+			admin_password=admin_password, verbose=verbose, source_sql=source_sql,force=force, reinstall=reinstall)
+
+		apps_to_install = ['frappe'] + (frappe.conf.get("install_apps") or []) + (list(install_apps) or [])
+		for app in apps_to_install:
 			_install_app(app, verbose=verbose, set_as_patched=not source_sql)
 
-	if install_apps:
-		for app in install_apps:
-			_install_app(app, verbose=verbose, set_as_patched=not source_sql)
+		frappe.utils.scheduler.toggle_scheduler(enable_scheduler)
+		frappe.db.commit()
 
-	frappe.utils.scheduler.toggle_scheduler(enable_scheduler)
-	frappe.db.commit()
+		scheduler_status = "disabled" if frappe.utils.scheduler.is_scheduler_disabled() else "enabled"
+		print "*** Scheduler is", scheduler_status, "***"
 
-	scheduler_status = "disabled" if frappe.utils.scheduler.is_scheduler_disabled() else "enabled"
-	print "*** Scheduler is", scheduler_status, "***"
-	frappe.destroy()
+	finally:
+		os.remove(installing)
+		frappe.destroy()
 
 @click.command('restore')
 @click.argument('sql-file-path')
@@ -75,6 +83,13 @@ def restore(context, sql_file_path, mariadb_root_username=None, mariadb_root_pas
 	"Restore site database from an sql file"
 	from frappe.installer import extract_sql_gzip, extract_tar_files
 	# Extract the gzip file if user has passed *.sql.gz file instead of *.sql file
+
+	if not os.path.exists(sql_file_path):
+		sql_file_path = '../' + sql_file_path
+		if not os.path.exists(sql_file_path):
+			print 'Invalid path {0}' + sql_file_path[3:]
+			sys.exit(1)
+
 	if sql_file_path.endswith('sql.gz'):
 		sql_file_path = extract_sql_gzip(os.path.abspath(sql_file_path))
 
@@ -139,14 +154,15 @@ def list_apps(context):
 @click.argument('email')
 @click.option('--first-name')
 @click.option('--last-name')
+@click.option('--send-welcome-email', default=False, is_flag=True)
 @pass_context
-def add_system_manager(context, email, first_name, last_name):
+def add_system_manager(context, email, first_name, last_name, send_welcome_email):
 	"Add a new system manager to a site"
 	import frappe.utils.user
 	for site in context.sites:
 		frappe.connect(site=site)
 		try:
-			frappe.utils.user.add_system_manager(email, first_name, last_name)
+			frappe.utils.user.add_system_manager(email, first_name, last_name, send_welcome_email)
 			frappe.db.commit()
 		finally:
 			frappe.destroy()
@@ -332,51 +348,74 @@ def set_admin_password(context, admin_password):
 		finally:
 			frappe.destroy()
 
-
 @click.command('set-limit')
 @click.option('--site', help='site name')
-@click.argument('limit', type=click.Choice(['email', 'space', 'user', 'expiry']))
+@click.argument('limit')
 @click.argument('value')
 @pass_context
 def set_limit(context, site, limit, value):
 	"""Sets user / space / email limit for a site"""
+	_set_limits(context, site, ((limit, value),))
+
+@click.command('set-limits')
+@click.option('--site', help='site name')
+@click.option('--limit', 'limits', type=(unicode, unicode), multiple=True)
+@pass_context
+def set_limits(context, site, limits):
+	_set_limits(context, site, limits)
+
+def _set_limits(context, site, limits):
 	import datetime
+
+	if not limits:
+		return
+
 	if not site:
 		site = get_site(context)
 
 	with frappe.init_site(site):
-		if limit == 'expiry':
-			try:
-				datetime.datetime.strptime(value, '%Y-%m-%d')
-			except ValueError:
-				raise ValueError("Incorrect data format, should be YYYY-MM-DD")
-		else:
-			limit += '_limit'
-			# Space can be float, while other should be integers
-			val = float(value) if limit == 'space_limit' else int(value)
+		new_limits = {}
+		for limit, value in limits:
+			if limit not in ('emails', 'space', 'users', 'expiry',
+				'support_email', 'support_chat', 'upgrade_url'):
+				frappe.throw('Invalid limit {0}'.format(limit))
 
-		set_limits({limit : value})
+			if limit=='expiry':
+				try:
+					datetime.datetime.strptime(value, '%Y-%m-%d')
+				except ValueError:
+					raise ValueError("Incorrect data format, should be YYYY-MM-DD")
 
+			elif limit=='space':
+				value = float(value)
 
-@click.command('clear-limit')
+			elif limit in ('users', 'emails'):
+				value = int(value)
+
+			new_limits[limit] = value
+
+		update_limits(new_limits)
+
+@click.command('clear-limits')
 @click.option('--site', help='site name')
-@click.argument('limit', type=click.Choice(['email', 'space', 'user', 'expiry']))
+@click.argument('limits', nargs=-1, type=click.Choice(['emails', 'space', 'users', 'expiry',
+	'support_email', 'support_chat', 'upgrade_url']))
 @pass_context
-def clear_limit(context, site, limit):
+def clear_limits(context, site, limits):
 	"""Clears given limit from the site config, and removes limit from site config if its empty"""
 	from frappe.limits import clear_limit as _clear_limit
+	if not limits:
+		return
+
 	if not site:
 		site = get_site(context)
 
 	with frappe.init_site(site):
-		if not limit == 'expiry':
-			limit += '_limit'
-
-		_clear_limit(limit)
+		_clear_limit(limits)
 
 		# Remove limits from the site_config, if it's empty
-		cur_limits = get_limits()
-		if not cur_limits:
+		limits = get_limits()
+		if not limits:
 			update_site_config('limits', 'None', validate=False)
 
 
@@ -396,6 +435,7 @@ commands = [
 	set_admin_password,
 	uninstall,
 	set_limit,
-	clear_limit,
+	set_limits,
+	clear_limits,
 	_use,
 ]

@@ -8,9 +8,10 @@ import requests
 from frappe.model.delete_doc import delete_doc
 from frappe.utils.data import today, add_to_date
 from frappe import _dict
-from frappe.limits import SiteExpiredError, set_limits, clear_limit
+from frappe.limits import SiteExpiredError, update_limits, clear_limit
 from frappe.utils import get_url
 from frappe.installer import update_site_config
+from frappe.core.doctype.user.user import MaxUsersReachedError
 
 test_records = frappe.get_test_records('User')
 
@@ -82,7 +83,7 @@ class TestUser(unittest.TestCase):
 	def test_user_limit_for_site(self):
 		from frappe.core.doctype.user.user import get_total_users
 
-		set_limits({'user_limit': get_total_users()})
+		update_limits({'users': get_total_users()})
 
 		# reload site config
 		from frappe import _dict
@@ -93,16 +94,16 @@ class TestUser(unittest.TestCase):
 		user.email = 'test_max_users@example.com'
 		user.first_name = 'Test_max_user'
 
-		self.assertRaises(frappe.utils.user.MaxUsersReachedError, user.add_roles, 'System Manager')
+		self.assertRaises(MaxUsersReachedError, user.add_roles, 'System Manager')
 
 		if frappe.db.exists('User', 'test_max_users@example.com'):
 			frappe.delete_doc('User', 'test_max_users@example.com')
 
 		# Clear the user limit
-		clear_limit('user_limit')
+		clear_limit('users')
 
 	def test_site_expiry(self):
-		set_limits({'expiry': add_to_date(today(), days=-1)})
+		update_limits({'expiry': add_to_date(today(), days=-1)})
 		frappe.local.conf = _dict(frappe.get_site_config())
 
 		frappe.db.commit()

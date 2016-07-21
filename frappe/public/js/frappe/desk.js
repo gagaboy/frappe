@@ -6,7 +6,7 @@ frappe.start_app = function() {
 		return;
 	frappe.assets.check();
 	frappe.provide('frappe.app');
-	$.extend(frappe.app, new frappe.Application());
+	frappe.app = new frappe.Application();
 }
 
 $(document).ready(function() {
@@ -72,7 +72,11 @@ frappe.Application = Class.extend({
 		});
 
 		frappe.realtime.on("version-update", function() {
-			var dialog = frappe.msgprint(__("The application has been updated to a new version, please refresh this page"));
+			var dialog = frappe.msgprint({
+				message:__("The application has been updated to a new version, please refresh this page"),
+				indicator: 'green',
+				title: 'Version Updated'
+			});
 			dialog.set_primary_action("Refresh", function() {
 				location.reload(true);
 			});
@@ -171,6 +175,7 @@ frappe.Application = Class.extend({
 		user_roles = frappe.boot.user.roles;
 		user_email = frappe.boot.user.email;
 		sys_defaults = frappe.boot.sysdefaults;
+		frappe.ui.py_date_format = frappe.boot.sysdefaults.date_format.replace('dd', '%d').replace('mm', '%m').replace('yyyy', '%Y');
 	},
 	sync_pages: function() {
 		// clear cached pages if timestamp is not found
@@ -212,14 +217,6 @@ frappe.Application = Class.extend({
 			frappe.frappe_toolbar = new frappe.ui.toolbar.Toolbar();
 		}
 
-		// collapse offcanvas sidebars!
-		$(".offcanvas .sidebar").on("click", "a", function() {
-			$(".offcanvas").removeClass("active-left active-right");
-		});
-
-		$(".offcanvas-main-section-overlay").on("click", function() {
-			$(".offcanvas").removeClass("active-left active-right");
-		});
 	},
 	logout: function() {
 		var me = this;
@@ -244,22 +241,28 @@ frappe.Application = Class.extend({
 		$('<link rel="icon" href="' + link + '" type="image/x-icon">').appendTo("head");
 	},
 
+	trigger_primary_action: function() {
+		if(cur_dialog) {
+			// trigger primary
+			cur_dialog.get_primary_btn().trigger("click");
+		} else if(cur_frm && cur_frm.page.btn_primary.is(':visible')) {
+			cur_frm.page.btn_primary.trigger('click');
+		} else if(frappe.container.page.save_action) {
+			frappe.container.page.save_action();
+		}
+	},
+
 	setup_keyboard_shortcuts: function() {
+		var me = this;
+
 		$(document)
 			.keydown("meta+g ctrl+g", function(e) {
-				$("#navbar-search").focus()
+				$("#navbar-search").focus();
 				return false;
 			})
 			.keydown("meta+s ctrl+s", function(e) {
 				e.preventDefault();
-				if(cur_dialog) {
-					// trigger primary
-					cur_dialog.get_primary_btn().trigger("click");
-				} else if(cur_frm && cur_frm.page.btn_primary.is(':visible')) {
-					cur_frm.page.btn_primary.trigger('click');
-				} else if(frappe.container.page.save_action) {
-					frappe.container.page.save_action();
-				}
+				me.trigger_primary_action();
 				return false;
 			})
 			.keydown("meta+b ctrl+b", function(e) {

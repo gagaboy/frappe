@@ -36,7 +36,8 @@ def get_bootinfo():
 	load_desktop_icons(bootinfo)
 
 	bootinfo.module_app = frappe.local.module_app
-	bootinfo.single_types = frappe.db.sql_list("""select name from tabDocType where issingle=1""")
+	bootinfo.single_types = frappe.db.sql_list("""select name from tabDocType
+		where issingle=1""")
 	add_home_page(bootinfo, doclist)
 	bootinfo.page_info = get_allowed_pages()
 	load_translations(bootinfo)
@@ -63,6 +64,7 @@ def get_bootinfo():
 
 	bootinfo.error_report_email = frappe.get_hooks("error_report_email")
 	bootinfo.calendars = sorted(frappe.get_hooks("calendars"))
+	bootinfo.treeviews = frappe.get_hooks("treeviews") or []
 	bootinfo.lang_dict = get_lang_dict()
 
 	return bootinfo
@@ -162,4 +164,4 @@ def load_print(bootinfo, doclist):
 	load_print_css(bootinfo, print_settings)
 
 def load_print_css(bootinfo, print_settings):
-	bootinfo.print_css = frappe.get_attr("frappe.templates.pages.print.get_print_style")(print_settings.print_style or "Modern", for_legacy=True)
+	bootinfo.print_css = frappe.get_attr("frappe.www.print.get_print_style")(print_settings.print_style or "Modern", for_legacy=True)

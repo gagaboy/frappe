@@ -58,7 +58,7 @@ $.extend(frappe.model, {
 		}
 
 		// set route options
-		if(frappe.route_options) {
+		if(frappe.route_options && !doc.parent) {
 			$.each(frappe.route_options, function(fieldname, value) {
 				if(frappe.meta.has_field(doctype, fieldname)) {
 					doc[fieldname]=value;
@@ -289,61 +289,6 @@ $.extend(frappe.model, {
 				}
 			}
 		})
-	},
-
-	map_current_doc: function(opts) {
-		if(opts.get_query_filters) {
-			opts.get_query = function() {
-				return {filters: opts.get_query_filters};
-			}
-		}
-		var _map = function() {
-			return frappe.call({
-				// Sometimes we hit the limit for URL length of a GET request
-				// as we send the full target_doc. Hence this is a POST request.
-				type: "POST",
-				method: opts.method,
-				args: {
-					"source_name": opts.source_name,
-					"target_doc": cur_frm.doc
-				},
-				callback: function(r) {
-					if(!r.exc) {
-						var doc = frappe.model.sync(r.message);
-						cur_frm.refresh();
-					}
-				}
-			});
-		}
-		if(opts.source_doctype) {
-			var d = new frappe.ui.Dialog({
-				title: __("Get From ") + __(opts.source_doctype),
-				fields: [
-					{
-						"fieldtype": "Link",
-						"label": __(opts.source_doctype),
-						"fieldname": opts.source_doctype,
-						"options": opts.source_doctype,
-						"get_query": opts.get_query,
-						reqd:1},
-					{
-						"fieldtype": "Button",
-						"label": __("Get"),
-						click: function() {
-							var values = d.get_values();
-							if(!values)
-								return;
-							opts.source_name = values[opts.source_doctype];
-							d.hide();
-							_map();
-						}
-					}
-				]
-			})
-			d.show();
-		} else if(opts.source_name) {
-			_map();
-		}
 	}
 });
 

@@ -18,18 +18,20 @@ frappe.views.ListSidebar = Class.extend({
 	make: function() {
 		var sidebar_content = frappe.render_template("list_sidebar", {doctype: this.doclistview.doctype});
 
-		this.offcanvas_list_sidebar = $(".offcanvas .list-sidebar").html(sidebar_content);
-		this.page_sidebar = $('<div class="list-sidebar hidden-xs hidden-sm"></div>')
+		this.sidebar = $('<div class="list-sidebar overlay-sidebar hidden-xs hidden-sm"></div>')
 			.html(sidebar_content)
 			.appendTo(this.page.sidebar.empty());
 
-		this.sidebar = this.page_sidebar.add(this.offcanvas_list_sidebar);
-
 		this.setup_reports();
 		this.setup_assigned_to_me();
+		this.setup_list_view_switching();
 
 		if(frappe.views.calendar[this.doctype]) {
 			this.sidebar.find(".calendar-link, .gantt-link").removeClass("hide");
+		}
+
+		if(frappe.treeview_settings[this.doctype]) {
+			this.sidebar.find(".tree-link").removeClass("hide");
 		}
 	},
 	setup_reports: function() {
@@ -43,7 +45,7 @@ frappe.views.ListSidebar = Class.extend({
 			$.each(reports, function(name, r) {
 				if(!r.ref_doctype || r.ref_doctype==me.doctype) {
 					var report_type = r.report_type==='Report Builder'
-						? 'Report' : 'query-report';
+						? 'Report/' + r.ref_doctype : 'query-report';
 					var route = r.route || report_type + '/' + r.name;
 
 					if(added.indexOf(route)===-1) {
@@ -75,10 +77,33 @@ frappe.views.ListSidebar = Class.extend({
 		this.page.sidebar.find(".assigned-to-me a").on("click", function() {
 			me.doclistview.assigned_to_me();
 		});
+	},
+	setup_list_view_switching: function() {
+		var me = this;
+		if(this.doclistview.meta.image_field) {
+			this.page.sidebar.find(".switch-list-view").removeClass("hide");
 
-		this.offcanvas_list_sidebar.find(".assigned-to-me a").on("click", function() {
-			me.doclistview.assigned_to_me();
-		});
+			var label = this.doclistview.meta.image_view ? __("Show List"): __("Show Images");
+			this.page.sidebar.find(".switch-list-view a").html(label)
+
+			var switch_list_view = function(view) {
+				var image_view = 0
+				if(view == __("Show Images"))
+					image_view = 1
+
+				me.doclistview.meta.image_view = image_view;
+
+				// clear and render the headers again while switching
+				me.doclistview.page.main.find(".list-headers").empty();
+				me.doclistview.init_headers();
+
+				me.doclistview.refresh(true);
+			};
+
+			this.page.sidebar.find(".switch-list-view a").on("click", function() {
+				switch_list_view(label)
+			});
+		}
 	},
 	get_stats: function() {
 		var me = this
@@ -133,7 +158,6 @@ frappe.views.ListSidebar = Class.extend({
 				var fieldname = $(this).attr('data-field');
 				var label = $(this).attr('data-label');
 				me.set_filter(fieldname, label);
-				return false;
 			})
 			.appendTo(this.sidebar);
 	},

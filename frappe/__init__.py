@@ -7,7 +7,6 @@ globals attached to frappe module
 from __future__ import unicode_literals
 
 from werkzeug.local import Local, release_local
-from functools import wraps
 import os, importlib, inspect, json
 
 # public
@@ -96,7 +95,7 @@ def init(site, sites_path=None, new_site=False):
 	local.realtime_log = []
 	local.flags = _dict({
 		"ran_schedulers": [],
-		"currenty_saving": _dict(),
+		"currently_saving": [],
 		"redirect_location": "",
 		"in_install_db": False,
 		"in_install_app": False,
@@ -252,7 +251,7 @@ def msgprint(msg, title=None, raise_exception=0, as_table=False, indicator=None,
 	:param raise_exception: [optional] Raise given exception and show message.
 	:param as_table: [optional] If `msg` is a list of lists, render as HTML table.
 	"""
-	from utils import cstr, encode
+	from utils import encode
 
 	out = _dict(message=msg)
 
@@ -261,6 +260,7 @@ def msgprint(msg, title=None, raise_exception=0, as_table=False, indicator=None,
 			if flags.rollback_on_exception:
 				db.rollback()
 			import inspect
+
 			if inspect.isclass(raise_exception) and issubclass(raise_exception, Exception):
 				raise raise_exception, encode(msg)
 			else:
@@ -355,11 +355,11 @@ def get_request_header(key, default=None):
 	return request.headers.get(key, default)
 
 def sendmail(recipients=(), sender="", subject="No Subject", message="No Message",
-		as_markdown=False, bulk=False, reference_doctype=None, reference_name=None,
+		as_markdown=False, delayed=True, reference_doctype=None, reference_name=None,
 		unsubscribe_method=None, unsubscribe_params=None, unsubscribe_message=None,
 		attachments=None, content=None, doctype=None, name=None, reply_to=None,
-		cc=(), show_as_cc=(), message_id=None, in_reply_to=None, as_bulk=False, send_after=None, expose_recipients=False,
-		bulk_priority=1, communication=None):
+		cc=(), show_as_cc=(), message_id=None, in_reply_to=None, send_after=None, expose_recipients=False,
+		send_priority=1, communication=None):
 	"""Send email using user's default **Email Account** or global default **Email Account**.
 
 
@@ -368,8 +368,8 @@ def sendmail(recipients=(), sender="", subject="No Subject", message="No Message
 	:param subject: Email Subject.
 	:param message: (or `content`) Email Content.
 	:param as_markdown: Convert content markdown to HTML.
-	:param bulk: Send via scheduled email sender **Bulk Email**. Don't send immediately.
-	:param bulk_priority: Priority for bulk email, default 1.
+	:param delayed: Send via scheduled email sender **Email Queue**. Don't send immediately. Default is true
+	:param send_priority: Priority for Email Queue, default 1.
 	:param reference_doctype: (or `doctype`) Append as communication to this DocType.
 	:param reference_name: (or `name`) Append as communication to this document name.
 	:param unsubscribe_method: Unsubscribe url with options email, doctype, name. e.g. `/api/method/unsubscribe`
@@ -380,17 +380,17 @@ def sendmail(recipients=(), sender="", subject="No Subject", message="No Message
 	:param in_reply_to: Used to send the Message-Id of a received email back as In-Reply-To.
 	:param send_after: Send after the given datetime.
 	:param expose_recipients: Display all recipients in the footer message - "This email was sent to"
-	:param communication: Communication link to be set in Bulk Email record
+	:param communication: Communication link to be set in Email Queue record
 	"""
 
-	if bulk or as_bulk:
-		import frappe.email.bulk
-		frappe.email.bulk.send(recipients=recipients, sender=sender,
+	if delayed:
+		import frappe.email.queue
+		frappe.email.queue.send(recipients=recipients, sender=sender,
 			subject=subject, message=content or message,
 			reference_doctype = doctype or reference_doctype, reference_name = name or reference_name,
 			unsubscribe_method=unsubscribe_method, unsubscribe_params=unsubscribe_params, unsubscribe_message=unsubscribe_message,
 			attachments=attachments, reply_to=reply_to, cc=cc, show_as_cc=show_as_cc, message_id=message_id, in_reply_to=in_reply_to,
-			send_after=send_after, expose_recipients=expose_recipients, bulk_priority=bulk_priority, communication=communication)
+			send_after=send_after, expose_recipients=expose_recipients, send_priority=send_priority, communication=communication)
 	else:
 		import frappe.email
 		if as_markdown:
@@ -460,12 +460,13 @@ def clear_cache(user=None, doctype=None):
 		frappe.sessions.clear_cache()
 		translate.clear_cache()
 		reset_metadata_version()
-		frappe.local.cache = {}
+		local.cache = {}
+		local.new_doc_templates = {}
 
-		for fn in frappe.get_hooks("clear_cache"):
+		for fn in get_hooks("clear_cache"):
 			get_attr(fn)()
 
-	frappe.local.role_permissions = {}
+	local.role_permissions = {}
 
 def has_permission(doctype=None, ptype="read", doc=None, user=None, verbose=False, throw=False):
 	"""Raises `frappe.PermissionError` if not permitted.
@@ -918,7 +919,6 @@ def import_doc(path, ignore_links=False, ignore_insert=False, insert=False):
 def copy_doc(doc, ignore_no_copy=True):
 	""" No_copy fields also get copied."""
 	import copy
-	from frappe.model import optional_fields, default_fields
 
 	def remove_no_copy_fields(d):
 		for df in d.meta.get("fields", {"no_copy": 1}):
@@ -984,7 +984,7 @@ def respond_as_web_page(title, html, success=None, http_status_code=None, contex
 	local.message = html
 	local.message_success = success
 	local.response['type'] = 'page'
-	local.response['page_name'] = 'message'
+	local.response['route'] = 'message'
 	if http_status_code:
 		local.response['http_status_code'] = http_status_code
 
@@ -1130,7 +1130,7 @@ def format_value(value, df, doc=None, currency=None):
 	import frappe.utils.formatters
 	return frappe.utils.formatters.format_value(value, df, doc, currency=currency)
 
-def get_print(doctype, name, print_format=None, style=None, html=None, as_pdf=False):
+def get_print(doctype, name, print_format=None, style=None, html=None, as_pdf=False, doc=None):
 	"""Get Print Format for given document.
 
 	:param doctype: DocType of document.
@@ -1145,6 +1145,7 @@ def get_print(doctype, name, print_format=None, style=None, html=None, as_pdf=Fa
 	local.form_dict.name = name
 	local.form_dict.format = print_format
 	local.form_dict.style = style
+	local.form_dict.doc = doc
 
 	if not html:
 		html = build_page("print")
@@ -1154,7 +1155,7 @@ def get_print(doctype, name, print_format=None, style=None, html=None, as_pdf=Fa
 	else:
 		return html
 
-def attach_print(doctype, name, file_name=None, print_format=None, style=None, html=None):
+def attach_print(doctype, name, file_name=None, print_format=None, style=None, html=None, doc=None):
 	from frappe.utils import scrub_urls
 
 	if not file_name: file_name = name
@@ -1167,17 +1168,28 @@ def attach_print(doctype, name, file_name=None, print_format=None, style=None, h
 	if int(print_settings.send_print_as_pdf or 0):
 		out = {
 			"fname": file_name + ".pdf",
-			"fcontent": get_print(doctype, name, print_format=print_format, style=style, html=html, as_pdf=True)
+			"fcontent": get_print(doctype, name, print_format=print_format, style=style, html=html, as_pdf=True, doc=doc)
 		}
 	else:
 		out = {
 			"fname": file_name + ".html",
-			"fcontent": scrub_urls(get_print(doctype, name, print_format=print_format, style=style, html=html)).encode("utf-8")
+			"fcontent": scrub_urls(get_print(doctype, name, print_format=print_format, style=style, html=html, doc=doc)).encode("utf-8")
 		}
 
 	local.flags.ignore_print_permissions = False
 
 	return out
+
+def publish_progress(*args, **kwargs):
+	"""Show the user progress for a long request
+
+	:param percent: Percent progress
+	:param title: Title
+	:param doctype: Optional, for DocType
+	:param name: Optional, for Document name
+	"""
+	import frappe.async
+	return frappe.async.publish_progress(*args, **kwargs)
 
 def publish_realtime(*args, **kwargs):
 	"""Publish real-time updates
@@ -1230,3 +1242,6 @@ def logger(module=None, with_more_info=True):
 
 def get_desk_link(doctype, name):
 	return '<a href="#Form/{0}/{1}" style="font-weight: bold;">{2} {1}</a>'.format(doctype, name, _(doctype))
+
+def bold(text):
+	return '<b>{0}</b>'.format(text)

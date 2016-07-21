@@ -6,18 +6,24 @@ frappe.pages['usage-info'].on_page_load = function(wrapper) {
 	});
 
 	frappe.call({
-			method: "frappe.limits.get_limits",
-			callback: function(doc) {
-				doc = doc.message;
-				if(!doc.database_size) doc.database_size = 26;
-				if(!doc.files_size) doc.files_size = 1;
-				if(!doc.backup_size) doc.backup_size = 1;
+		method: "frappe.limits.get_usage_info",
+		callback: function(r) {
+			var usage_info = r.message;
+			if (!usage_info) {
+				// nothing to show
+				// TODO improve this
+				return;
+			}
 
-				doc.max = flt(doc.space_limit * 1024);
-				doc.total = (doc.database_size + doc.files_size + doc.backup_size);
-				doc.users = keys(frappe.boot.user_info).length - 2;
+			$(frappe.render_template("usage_info", usage_info)).appendTo(page.main);
 
-				$(frappe.render_template("usage_info", doc)).appendTo(page.main);
+			var btn_text = usage_info.limits.users == 1 ? __("Upgrade") : __("Renew / Upgrade");
+
+			if(usage_info.upgrade_url) {
+				page.set_primary_action(btn_text, function() {
+					window.open(usage_info.upgrade_url);
+				});
+			}
 		}
 	});
 

@@ -104,8 +104,7 @@ def notify_mentions(doc):
 			recipients=recipients,
 			sender=frappe.session.user,
 			subject=subject,
-			message=message,
-			bulk=True
+			message=message
 		)
 
 def get_comments_from_parent(doc):
@@ -149,8 +148,8 @@ def update_comments_in_parent(reference_doctype, reference_name, _comments):
 	else:
 		if not frappe.flags.in_patch:
 			reference_doc = frappe.get_doc(reference_doctype, reference_name)
-			if getattr(reference_doc, "get_route", None):
-				clear_cache(reference_doc.get_route())
+			if getattr(reference_doc, "route", None):
+				clear_cache(reference_doc.route)
 
 def add_info_comment(**kwargs):
 	kwargs.update({

@@ -231,6 +231,14 @@ a.form-link {
   font-weight: bold;
   font-size: 102%;
 }
+a[disabled="disabled"] {
+  color: #8D99A6;
+  text-decoration: none;
+  cursor: default;
+}
+a[disabled="disabled"]:hover {
+  text-decoration: none;
+}
 .link-btn {
   position: absolute;
   top: 2px;
@@ -238,6 +246,7 @@ a.form-link {
   border-radius: 2px;
   padding: 3px;
   display: none;
+  z-index: 3;
 }
 .link-primary {
   color: #5E64FF;
@@ -319,6 +328,11 @@ a.form-link {
 textarea.form-control {
   height: 120px;
 }
+.form-control[disabled],
+.form-control[readonly],
+fieldset[disabled] .form-control {
+  background-color: #fafbfc;
+}
 .link-select-row {
   padding: 5px;
   border-bottom: 1px solid #EBEFF2;
@@ -352,6 +366,7 @@ textarea.form-control {
   max-height: 200px;
   overflow-y: auto;
   overflow-x: hidden;
+  z-index: 1041;
 }
 .ui-autocomplete a {
   transition: none;
@@ -378,13 +393,21 @@ textarea.form-control {
 }
 .ui-datepicker .ui-state-active,
 .ui-autocomplete .ui-state-active {
-  background-color: #5E64FF !important;
-  color: #fff !important;
+  background-color: #F0F4F7 !important;
+  color: #36414C !important;
   text-shadow: none !important;
+  border: none;
+}
+.ui-datepicker .ui-state-active .small,
+.ui-autocomplete .ui-state-active .small {
+  color: #555 !important;
 }
 .ui-menu .ui-menu-item {
-  padding: 7px;
   font-size: 12px;
+}
+.ui-menu .ui-menu-item a {
+  padding: 9px 11.8px !important;
+  text-decoration: none;
 }
 @media (min-width: 768px) {
   .video-modal {
@@ -421,6 +444,9 @@ textarea.form-control {
 }
 .form-control {
   position: relative;
+}
+.form-control input {
+  padding: 6px 10px 8px;
 }
 .link-field.ui-front {
   z-index: inherit;

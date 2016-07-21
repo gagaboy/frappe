@@ -63,12 +63,12 @@ frappe.pages['modules'].on_page_load = function(wrapper) {
 		page.set_title(__(m.label));
 		page.main.html(frappe.render_template('modules_section', m));
 
-		if(frappe.utils.is_xs() || frappe.utils.is_sm()) {
-			// call this after a timeout, becuase a refresh will set the page to the top
-			setTimeout(function() {
-				$(document).scrollTop($('.module-body').offset().top - 100);
-			}, 100);
-		}
+		// if(frappe.utils.is_xs() || frappe.utils.is_sm()) {
+		// 	// call this after a timeout, becuase a refresh will set the page to the top
+		// 	setTimeout(function() {
+		// 		$(document).scrollTop($('.module-body').offset().top - 150);
+		// 	}, 100);
+		// }
 
 		//setup_section_toggle();
 		frappe.app.update_notification_count_in_modules();
@@ -139,6 +139,7 @@ frappe.pages['modules'].on_page_load = function(wrapper) {
 
 frappe.pages['modules'].on_page_show = function(wrapper) {
 	var route = frappe.get_route();
+	$("body").attr("data-sidebar", 1);
 	if(route.length > 1) {
 		// activate section based on route
 		frappe.modules_page.activate_link(

@@ -128,7 +128,6 @@
 		"public/js/frappe/ui/toolbar/awesome_bar.js",
 		"public/js/frappe/ui/toolbar/about.js",
 		"public/js/frappe/ui/toolbar/navbar.html",
-		"public/js/frappe/ui/toolbar/offcanvas_left_sidebar.html",
 		"public/js/frappe/ui/toolbar/toolbar.js",
 		"public/js/frappe/ui/toolbar/notifications.js",
 		"public/js/frappe/views/communication.js",
@@ -219,12 +218,12 @@
 		"public/js/frappe/views/calendar_base.js",
 		"public/js/frappe/views/calendar.js",
 		"public/js/frappe/views/ganttview.js",
-
 		"public/js/frappe/list/blueimp-gallery.html",
 		"public/js/frappe/list/image_view_item_row.html",
 		"public/js/frappe/list/image_view_item_main_head.html",
 		"public/js/frappe/list/header_select_all_like_filter.html",
-		"public/js/frappe/list/item_assigned_to_comment_count.html"
+		"public/js/frappe/list/item_assigned_to_comment_count.html",
+		"public/js/frappe/views/treeview.js"
 	],
 	"css/report.min.css": [
 		"public/css/report.css",

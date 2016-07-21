@@ -3,6 +3,7 @@
 
 from __future__ import unicode_literals
 import frappe
+from frappe.model.document import Document
 from frappe.utils import cint, has_gravatar, format_datetime, now_datetime, get_formatted_email
 from frappe import throw, msgprint, _
 from frappe.utils.password import update_password as _update_password
@@ -11,10 +12,11 @@ from frappe.utils.user import get_system_managers
 import frappe.permissions
 import frappe.share
 import re
+from frappe.limits import get_limits
 
 STANDARD_USERS = ("Guest", "Administrator")
 
-from frappe.model.document import Document
+class MaxUsersReachedError(frappe.ValidationError): pass
 
 class User(Document):
 	__new_password = None
@@ -54,6 +56,7 @@ class User(Document):
 		self.remove_all_roles_for_guest()
 		self.validate_username()
 		self.remove_disabled_roles()
+		self.validate_user_limit()
 
 		if self.language == "Loading...":
 			self.language = None
@@ -189,19 +192,21 @@ class User(Document):
 			(self.first_name and " " or '') + (self.last_name or '')
 
 	def password_reset_mail(self, link):
-		self.send_login_mail(_("Password Reset"), "templates/emails/password_reset.html", {"link": link})
+		self.send_login_mail(_("Password Reset"),
+			"templates/emails/password_reset.html", {"link": link}, now=True)
 
 	def password_update_mail(self, password):
-		self.send_login_mail(_("Password Update"), "templates/emails/password_update.html", {"new_password": password})
+		self.send_login_mail(_("Password Update"),
+			"templates/emails/password_update.html", {"new_password": password}, now=True)
 
 	def send_welcome_mail_to_user(self):
-		from frappe.utils import random_string, get_url
+		from frappe.utils import get_url
 
 		link = self.reset_password()
 		self.send_login_mail(_("Verify Your Account"), "templates/emails/new_user.html",
 			{"link": link, "site_url": get_url()})
 
-	def send_login_mail(self, subject, template, add_args):
+	def send_login_mail(self, subject, template, add_args, now=None):
 		"""send mail with login details"""
 		from frappe.utils.user import get_user_fullname
 		from frappe.utils import get_url
@@ -226,7 +231,8 @@ class User(Document):
 		sender = frappe.session.user not in STANDARD_USERS and get_formatted_email(frappe.session.user) or None
 
 		frappe.sendmail(recipients=self.email, sender=sender, subject=subject,
-			message=frappe.get_template(template).render(args), as_bulk=self.flags.delay_emails)
+			message=frappe.get_template(template).render(args),
+			delayed=(not now) if now!=None else self.flags.delay_emails)
 
 	def a_system_manager_should_exist(self):
 		if not self.get_other_system_managers():
@@ -380,6 +386,34 @@ class User(Document):
 		"""Returns list of modules blocked for that user"""
 		return [d.module for d in self.block_modules] if self.block_modules else []
 
+	def validate_user_limit(self):
+		'''
+			Validate if user limit has been reached for System Users
+			Checked in 'Validate' event as we don't want welcome email sent if max users are exceeded.
+		'''
+
+		if self.user_type == "Website User":
+			return
+
+		if not self.enabled:
+			# don't validate max users when saving a disabled user
+			return
+
+		limits = get_limits()
+		if not limits.users:
+			# no limits defined
+			return
+
+		total_users = get_total_users()
+		if self.is_new():
+			# get_total_users gets existing users in database
+			# a new record isn't inserted yet, so adding 1
+			total_users += 1
+
+		if total_users > limits.users:
+			frappe.throw(_("Sorry. You have reached the maximum user limit for your subscription. You can either disable an existing user or buy a higher subscription plan."),
+				MaxUsersReachedError)
+
 @frappe.whitelist()
 def get_timezones():
 	import pytz
@@ -406,16 +440,11 @@ def get_perm_info(arg=None):
 
 @frappe.whitelist(allow_guest=True)
 def update_password(new_password, key=None, old_password=None):
-	# verify old password
-	if key:
-		user = frappe.db.get_value("User", {"reset_password_key":key})
-		if not user:
-			return _("Cannot Update: Incorrect / Expired Link.")
-
-	elif old_password:
-		# verify old password
-		frappe.local.login_manager.check_password(frappe.session.user, old_password)
-		user = frappe.session.user
+	res = _get_user_for_update_password(key, old_password)
+	if res.get('message'):
+		return res['message']
+	else:
+		user = res['user']
 
 	_update_password(user, new_password)
 
@@ -427,6 +456,44 @@ def update_password(new_password, key=None, old_password=None):
 		return "/desk"
 	else:
 		return redirect_url if redirect_url else "/"
+
+@frappe.whitelist(allow_guest=True)
+def test_password_strength(new_password, key=None, old_password=None):
+	from frappe.utils.password_strength import test_password_strength as _test_password_strength
+
+	res = _get_user_for_update_password(key, old_password)
+	if not res:
+		return
+	elif res.get('message'):
+		return res['message']
+	else:
+		user = res['user']
+
+	user_data = frappe.db.get_value('User', user, ['first_name', 'middle_name', 'last_name', 'email', 'birth_date'])
+
+	if new_password:
+		return _test_password_strength(new_password, user_inputs=user_data)
+
+def _get_user_for_update_password(key, old_password):
+	# verify old password
+	if key:
+		user = frappe.db.get_value("User", {"reset_password_key": key})
+		if not user:
+			return {
+				'message': _("Cannot Update: Incorrect / Expired Link.")
+			}
+
+	elif old_password:
+		# verify old password
+		frappe.local.login_manager.check_password(frappe.session.user, old_password)
+		user = frappe.session.user
+
+	else:
+		return
+
+	return {
+		'user': user
+	}
 
 def reset_user_data(user):
 	user_doc = frappe.get_doc("User", user)
@@ -488,6 +555,7 @@ def user_query(doctype, txt, searchfield, start, page_len, filters):
 	return frappe.db.sql("""select name, concat_ws(' ', first_name, middle_name, last_name)
 		from `tabUser`
 		where enabled=1
+			and user_type = 'System User'
 			and docstatus < 2
 			and name not in ({standard_users})
 			and ({key} like %s
@@ -574,7 +642,7 @@ def notifify_admin_access_to_system_manager(login_manager=None):
 		)
 
 		frappe.sendmail(recipients=get_system_managers(), subject=_("Administrator Logged In"),
-			message=message, bulk=True)
+			message=message)
 
 def extract_mentions(txt):
 	"""Find all instances of @username in the string.

@@ -120,7 +120,7 @@ def random_string(length):
 
 def has_gravatar(email):
 	'''Returns gravatar url if user has set an avatar at gravatar.com'''
-	if (frappe.flags.in_upload
+	if (frappe.flags.in_import
 		or frappe.flags.in_install
 		or frappe.flags.in_test):
 		# no gravatar if via upload
@@ -318,7 +318,7 @@ def get_disk_usage():
 def touch_file(path):
 	with open(path, 'a'):
 		os.utime(path, None)
-	return True
+	return path
 
 def get_test_client():
 	from frappe.app import application
@@ -387,7 +387,7 @@ def get_sites(sites_path=None):
 			# is a dir and has site_config.json
 			sites.append(site)
 
-	return sites
+	return sorted(sites)
 
 def get_request_session(max_retries=3):
 	from requests.packages.urllib3.util import Retry
@@ -423,7 +423,7 @@ def watch(path, handler=None, debug=True):
 		observer.stop()
 	observer.join()
 
-def sanitize_html(html):
+def sanitize_html(html, linkify=False):
 	"""
 	Sanitize HTML tags, attributes and style to prevent XSS attacks
 	Based on bleach clean, bleach whitelist and HTML5lib's Sanitizer defaults
@@ -436,15 +436,25 @@ def sanitize_html(html):
 	elif is_json(html):
 		return html
 
-	whitelisted_tags = (HTMLSanitizer.acceptable_elements + HTMLSanitizer.svg_elements
+	tags = (HTMLSanitizer.acceptable_elements + HTMLSanitizer.svg_elements
 		+ ["html", "head", "meta", "link", "body", "iframe", "style", "o:p"])
+	attributes = {"*": HTMLSanitizer.acceptable_attributes, "svg": HTMLSanitizer.svg_attributes}
+	styles = bleach_whitelist.all_styles
+	strip_comments = False
 
 	# retuns html with escaped tags, escaped orphan >, <, etc.
-	escaped_html = bleach.clean(html,
-		tags=whitelisted_tags,
-		attributes={"*": HTMLSanitizer.acceptable_attributes, "svg": HTMLSanitizer.svg_attributes},
-		styles=bleach_whitelist.all_styles,
-		strip_comments=False)
+	escaped_html = bleach.clean(html, tags=tags, attributes=attributes, styles=styles, strip_comments=strip_comments)
+
+	if linkify:
+		# based on bleach.clean
+		class s(bleach.BleachSanitizer):
+			allowed_elements = tags
+			allowed_attributes = attributes
+			allowed_css_properties = styles
+			strip_disallowed_elements = False
+			strip_html_comments = strip_comments
+
+		escaped_html = bleach.linkify(escaped_html, tokenizer=s)
 
 	return escaped_html
 
@@ -458,12 +468,12 @@ def is_json(text):
 	else:
 		return True
 
-def markdown(text, sanitize=True):
+def markdown(text, sanitize=True, linkify=True):
 	html = _markdown(text)
 
 	if sanitize:
 		html = html.replace("<!-- markdown -->", "")
-		html = sanitize_html(html)
+		html = sanitize_html(html, linkify=linkify)
 
 	return html
 
@@ -479,3 +489,43 @@ def sanitize_email(emails):
 		sanitized.append(formataddr((fullname, email_id)))
 
 	return ", ".join(sanitized)
+
+def get_site_info():
+	from frappe.utils.user import get_system_managers
+	from frappe.core.doctype.user.user import STANDARD_USERS
+	from frappe.email.queue import get_emails_sent_this_month
+
+	# only get system users
+	users = frappe.get_all('User', filters={'user_type': 'System User', 'name': ('not in', STANDARD_USERS)},
+		fields=['name', 'first_name', 'last_name', 'enabled',
+			'last_login', 'last_active', 'language', 'time_zone'])
+	system_managers = get_system_managers(only_name=True)
+	for u in users:
+		# tag system managers
+		u.is_system_manager = 1 if u.name in system_managers else 0
+		u.full_name = get_fullname(u.name)
+
+	system_settings = frappe.db.get_singles_dict('System Settings')
+	space_usage = frappe._dict((frappe.local.conf.limits or {}).get('space_usage', {}))
+
+	site_info = {
+		'users': users,
+		'country': system_settings.country,
+		'language': system_settings.language or 'english',
+		'time_zone': system_settings.time_zone,
+		'setup_complete': cint(system_settings.setup_complete),
+
+		# usage
+		'emails_sent': get_emails_sent_this_month(),
+		'space_used': flt((space_usage.total or 0) / 1024.0, 2),
+		'database_size': space_usage.database_size,
+		'backup_size': space_usage.backup_size,
+		'files_size': space_usage.files_size
+	}
+
+	# from other apps
+	for method_name in frappe.get_hooks('get_site_info'):
+		site_info.update(frappe.get_attr(method_name)(site_info) or {})
+
+	# dumps -> loads to prevent datatype conflicts
+	return json.loads(frappe.as_json(site_info))

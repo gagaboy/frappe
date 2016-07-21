@@ -15,6 +15,7 @@ import json
 import schedule
 import time
 import os
+import MySQLdb
 import frappe.utils
 from frappe.utils import get_sites, get_site_path, touch_file
 from datetime import datetime
@@ -65,8 +66,6 @@ def enqueue_events_for_site(site, queued_jobs):
 
 		enqueue_events(site=site, queued_jobs=queued_jobs)
 
-		# TODO this print call is a tempfix till logging is fixed!
-		print 'Queued events for site {0}'.format(site)
 		frappe.logger(__name__).debug('Queued events for site {0}'.format(site))
 
 	except:
@@ -131,6 +130,9 @@ def enqueue_applicable_events(site, nowtime, last, queued_jobs=()):
 		trigger_if_enabled(site, "hourly")
 		trigger_if_enabled(site, "hourly_long")
 
+		if "all" not in enabled_events:
+			trigger(site, "all", queued_jobs)
+
 	trigger_if_enabled(site, "all")
 
 	return out
@@ -175,7 +177,10 @@ def log(method, message=None):
 def get_enabled_scheduler_events():
 	enabled_events = frappe.db.get_global("enabled_scheduler_events")
 	if enabled_events:
-		return json.loads(enabled_events)
+		if isinstance(enabled_events, basestring):
+			enabled_events = json.loads(enabled_events)
+
+		return enabled_events
 
 	return ["all", "hourly", "hourly_long", "daily", "daily_long",
 		"weekly", "weekly_long", "monthly", "monthly_long"]
@@ -190,6 +195,7 @@ def toggle_scheduler(enable):
 	ss = frappe.get_doc("System Settings")
 	ss.enable_scheduler = 1 if enable else 0
 	ss.flags.ignore_mandatory = True
+	ss.flags.ignore_permissions = True
 	ss.save()
 
 def enable_scheduler():
@@ -269,9 +275,8 @@ def restrict_scheduler_events_if_dormant():
 		update_site_config('dormant', True)
 
 def restrict_scheduler_events(*args, **kwargs):
-	val = json.dumps(["daily", "daily_long", "weekly", "weekly_long", "monthly", "monthly_long"])
+	val = json.dumps(["hourly", "hourly_long", "daily", "daily_long", "weekly", "weekly_long", "monthly", "monthly_long"])
 	frappe.db.set_global('enabled_scheduler_events', val)
-
 
 def is_dormant(since = 345600):
 	last_active = get_datetime(get_last_active())

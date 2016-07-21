@@ -8,8 +8,6 @@ from frappe import _dict
 import frappe.share
 from frappe import _
 
-class MaxUsersReachedError(frappe.ValidationError): pass
-
 class UserPermissions:
 	"""
 	A user permission object can be accessed as `frappe.get_user()`
@@ -246,7 +244,7 @@ def get_system_managers(only_name=False):
 def add_role(user, role):
 	frappe.get_doc("User", user).add_roles(role)
 
-def add_system_manager(email, first_name=None, last_name=None):
+def add_system_manager(email, first_name=None, last_name=None, send_welcome_email=False):
 	# add user
 	user = frappe.new_doc("User")
 	user.update({
@@ -255,7 +253,8 @@ def add_system_manager(email, first_name=None, last_name=None):
 		"enabled": 1,
 		"first_name": first_name or email,
 		"last_name": last_name,
-		"user_type": "System User"
+		"user_type": "System User",
+		"send_welcome_email": 1 if send_welcome_email else 0
 	})
 	user.insert()
 
@@ -289,7 +288,7 @@ def get_enabled_system_users():
 		user_type='System User' and enabled=1 and name not in ('Administrator', 'Guest')""", as_dict=1)
 
 def is_website_user():
-	return frappe.get_user().doc.user_type == "Website User"
+	return frappe.db.get_value('User', frappe.session.user, 'user_type') == "Website User"
 
 def is_system_user(username):
 	return frappe.db.get_value("User", {"name": username, "enabled": 1, "user_type": "System User"})
@@ -307,36 +306,3 @@ def get_users():
 		})
 
 	return users
-
-
-def validate_user_limit(doc, method):
-	"""
-		This is called using validate hook, because welcome email is sent in on_update.
-		We don't want welcome email sent if max users are exceeded.
-	"""
-	from frappe.limits import get_limits
-	from frappe.core.doctype.user.user import get_total_users
-	frappe_limits = get_limits()
-
-	if doc.user_type == "Website User":
-		return
-
-	if not doc.enabled:
-		# don't validate max users when saving a disabled user
-		return
-
-	user_limit = frappe_limits.get("user_limit") if frappe_limits else None
-
-	if not user_limit:
-		return
-
-	total_users = get_total_users()
-
-	if doc.is_new():
-		# get_total_users gets existing users in database
-		# a new record isn't inserted yet, so adding 1
-		total_users += 1
-
-	if total_users > user_limit:
-		frappe.throw(_("Sorry. You have reached the maximum user limit for your subscription. You can either disable an existing user or buy a higher subscription plan."),
-			MaxUsersReachedError)
